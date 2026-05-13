@@ -1,0 +1,43 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Data directories
+data/qdrant_storage/
+data/uploads/
+data/outputs/
+
+# Docker volumes
+model-cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Playwright
+playwright-report/
+test-results/
+
+# Coverage
+.coverage
+coverage.xml
+htmlcov/
+
+# Pytest
+.pytest_cache/

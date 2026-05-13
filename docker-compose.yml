@@ -1,0 +1,222 @@
+version: "3.9"
+
+services:
+  # ============================================================
+  # vLLM Inference Engine — Foundation-Sec-8B (AWQ 4-bit)
+  # ============================================================
+  vllm-engine:
+    image: vllm/vllm-openai:latest
+    container_name: jobseeker-vllm
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - HF_HOME=/model-cache
+    ports:
+      - "${VLLM_PORT:-8000}:8000"
+    volumes:
+      - model-cache:/model-cache
+      - ./services/vllm/start.sh:/start.sh:ro
+    command: >
+      --model ${VLLM_MODEL_NAME:-fdtn-ai/Foundation-Sec-8B-Reasoning}
+      --quantization ${VLLM_QUANTIZATION:-awq}
+      --max-model-len ${VLLM_MAX_MODEL_LEN:-4096}
+      --gpu-memory-utilization ${VLLM_GPU_MEMORY_UTILIZATION:-0.7}
+      --enforce-eager
+      --host 0.0.0.0
+      --port 8000
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - jobseeker-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+
+  # ============================================================
+  # Qdrant Vector Database
+  # ============================================================
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: jobseeker-qdrant
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+      - ./services/qdrant/config.yaml:/qdrant/config/production.yaml:ro
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    networks:
+      - jobseeker-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ============================================================
+  # Redis — Celery Broker & Result Backend
+  # ============================================================
+  redis:
+    image: redis:7-alpine
+    container_name: jobseeker-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - jobseeker-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # ============================================================
+  # Orchestrator API — FastAPI Backend
+  # ============================================================
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.orchestrator
+    container_name: jobseeker-orchestrator
+    ports:
+      - "${API_PORT:-8001}:8001"
+    volumes:
+      - ./services:/app/services:ro
+      - ./data/uploads:/app/data/uploads
+      - ./data/outputs:/app/data/outputs
+    environment:
+      - VLLM_HOST=${VLLM_HOST:-vllm-engine}
+      - VLLM_PORT=${VLLM_PORT:-8000}
+      - QDRANT_HOST=${QDRANT_HOST:-qdrant}
+      - QDRANT_PORT=${QDRANT_PORT:-6333}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME:-mixedbread-ai/mxbai-embed-large-v1}
+      - EMBEDDING_DEVICE=${EMBEDDING_DEVICE:-cuda}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+    depends_on:
+      vllm-engine:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - jobseeker-net
+    restart: unless-stopped
+
+  # ============================================================
+  # Celery Worker — Async Task Processing
+  # ============================================================
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.orchestrator
+    container_name: jobseeker-celery
+    command: celery -A services.tasks.celery_app worker --loglevel=info --concurrency=2
+    volumes:
+      - ./services:/app/services:ro
+      - ./data/uploads:/app/data/uploads
+      - ./data/outputs:/app/data/outputs
+    environment:
+      - VLLM_HOST=${VLLM_HOST:-vllm-engine}
+      - VLLM_PORT=${VLLM_PORT:-8000}
+      - QDRANT_HOST=${QDRANT_HOST:-qdrant}
+      - QDRANT_PORT=${QDRANT_PORT:-6333}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME:-mixedbread-ai/mxbai-embed-large-v1}
+      - EMBEDDING_DEVICE=${EMBEDDING_DEVICE:-cuda}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      - PLAYWRIGHT_HEADLESS=${PLAYWRIGHT_HEADLESS:-true}
+      - PLAYWRIGHT_TIMEOUT_MS=${PLAYWRIGHT_TIMEOUT_MS:-30000}
+    depends_on:
+      vllm-engine:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - jobseeker-net
+    restart: unless-stopped
+
+  # ============================================================
+  # Celery Beat — Scheduled Task Scheduler
+  # ============================================================
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile.orchestrator
+    container_name: jobseeker-celery-beat
+    command: celery -A services.tasks.celery_app beat --loglevel=info
+    volumes:
+      - ./services:/app/services:ro
+    environment:
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - jobseeker-net
+    restart: unless-stopped
+
+  # ============================================================
+  # Streamlit Frontend Dashboard
+  # ============================================================
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    container_name: jobseeker-streamlit
+    ports:
+      - "${STREAMLIT_PORT:-8501}:8501"
+    volumes:
+      - ./frontend:/app/frontend
+      - ./data/uploads:/app/data/uploads
+      - ./data/outputs:/app/data/outputs
+    environment:
+      - API_HOST=orchestrator
+      - API_PORT=8001
+      - STREAMLIT_HOST=${STREAMLIT_HOST:-0.0.0.0}
+      - STREAMLIT_PORT=${STREAMLIT_PORT:-8501}
+    depends_on:
+      - orchestrator
+    networks:
+      - jobseeker-net
+    restart: unless-stopped
+
+# ============================================================
+# Persistent Volumes
+# ============================================================
+volumes:
+  model-cache:
+    name: jobseeker-model-cache
+  qdrant-data:
+    name: jobseeker-qdrant-data
+  redis-data:
+    name: jobseeker-redis-data
+
+# ============================================================
+# Shared Network
+# ============================================================
+networks:
+  jobseeker-net:
+    name: jobseeker-net
+    driver: bridge
