@@ -46,18 +46,17 @@ class MatchResult:
 
 
 def _get_resume_payload(resume_id: str) -> dict:
-    """Retrieve resume payload from Qdrant."""
+    """Retrieve resume payload from Qdrant by ID (O(1) lookup)."""
     client = get_qdrant_client()
-    records, _ = client.scroll(
+    results = client.retrieve(
         collection_name=settings.qdrant_collection_resumes,
-        limit=100,
+        ids=[resume_id],
         with_payload=True,
         with_vectors=False,
     )
-    for r in records:
-        if str(r.id) == str(resume_id):
-            return r.payload or {}
-    raise ValueError(f"Resume not found: {resume_id}")
+    if not results:
+        raise ValueError(f"Resume not found: {resume_id}")
+    return results[0].payload or {}
 
 
 def _hard_filter(resume_payload: dict, job_payload: dict) -> tuple[bool, list[str], list[str]]:

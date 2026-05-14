@@ -242,10 +242,10 @@ class TestExtractAllMetadata:
         result = extract_all_metadata("")
         assert result["required_certs"] == []
         assert result["required_skills"] == []
-        assert result["clearance_level"] is None
+        assert result["clearance_level"] == ""
 
     def test_no_metadata(self):
         result = extract_all_metadata("Generic job description with no specific requirements")
         assert result["required_certs"] == []
         assert result["required_skills"] == []
-        assert result["clearance_level"] is None
+        assert result["clearance_level"] == ""

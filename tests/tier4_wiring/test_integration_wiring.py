@@ -90,7 +90,8 @@ class TestIntegrationWiring:
             )
         ]
 
-        mock_qdrant_client.scroll.return_value = ([mock_resume_record], None)
+        # _get_resume_payload now uses client.retrieve(), not scroll
+        mock_qdrant_client.retrieve.return_value = [mock_resume_record]
 
         match_response = await test_app.post("/api/match/jobs", json={
             "resume_id": resume_id,
@@ -121,7 +122,9 @@ class TestIntegrationWiring:
             assert len(rewrite_data["diff"]) > 0
 
         # --- Step 5: Submit application ---
-        with patch("services.api.routes.submit.submit_application_task") as mock_task:
+        mock_redis = MagicMock()
+        with patch("services.api.routes.submit.submit_application_task") as mock_task, \
+             patch("services.api.routes.submit._get_redis", return_value=mock_redis):
             mock_task.delay.return_value = MagicMock(id="task-final")
 
             submit_response = await test_app.post("/api/submit/apply", json={
@@ -129,6 +132,8 @@ class TestIntegrationWiring:
                 "resume_id": resume_id,
                 "tailored_resume": rewrite_data["tailored_resume"],
                 "job_url": "https://careers.acme.com/apply/123",
+                "job_title": "Senior Cybersecurity Engineer",
+                "company": "Acme Defense Corp",
             })
             assert submit_response.status_code == 200
             submit_data = submit_response.json()

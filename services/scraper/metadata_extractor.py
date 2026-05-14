@@ -77,9 +77,8 @@ SKILL_KEYWORDS: list[str] = [
 def extract_certs(text: str) -> list[str]:
     """Extract mentioned certifications from text."""
     found = set()
-    text_upper = text.upper()
     for pattern, cert_name in CERT_PATTERNS:
-        if re.search(pattern, text_upper, re.IGNORECASE):
+        if re.search(pattern, text, re.IGNORECASE):
             found.add(cert_name)
     return sorted(found)
 
@@ -107,5 +106,5 @@ def extract_all_metadata(text: str) -> dict:
     return {
         "required_certs": extract_certs(text),
         "required_skills": extract_skills(text),
-        "clearance_level": extract_clearance(text),
+        "clearance_level": extract_clearance(text) or "",
     }

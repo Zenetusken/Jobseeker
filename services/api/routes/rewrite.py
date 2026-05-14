@@ -15,6 +15,7 @@ router = APIRouter()
 class RewriteRequest(BaseModel):
     resume_id: str
     job_id: str
+    match_score: float = 0.0
 
 
 class RewriteResponse(BaseModel):
@@ -33,6 +34,7 @@ async def tailor_resume(req: RewriteRequest):
         result: RewriteResult = rewrite_resume_for_job(
             resume_id=req.resume_id,
             job_id=req.job_id,
+            match_score=req.match_score,
         )
         return {
             "job_title": result.job_title,

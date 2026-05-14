@@ -42,16 +42,15 @@ class TestIngestJobText:
             )
 
             call_args = mock_qdrant_client.upsert.call_args
-            # Check that points were passed
             kwargs = call_args.kwargs
             assert "points" in kwargs
             points = kwargs["points"]
             assert len(points) == 1
-            point = points[0]
-            assert "id" in point
-            assert "vector" in point
-            assert "payload" in point
-            payload = point["payload"]
+            point = points[0]  # PointStruct — use attribute access
+            assert point.id is not None
+            assert point.vector is not None
+            assert point.payload is not None
+            payload = point.payload
             assert payload["title"] == "Security Engineer"
             assert payload["company"] == "Acme"
             assert payload["source"] == "manual"
@@ -73,14 +72,16 @@ class TestIngestJobText:
                 description="CISSP and Top Secret clearance required. SIEM experience needed.",
             )
 
-            payload = mock_qdrant_client.upsert.call_args.kwargs["points"][0]["payload"]
+            payload = mock_qdrant_client.upsert.call_args.kwargs["points"][0].payload
             assert "CISSP" in payload.get("required_certs", [])
             assert payload.get("clearance_level") == "Top Secret"
 
 
 class TestIngestJobBatch:
     def test_returns_list_of_ids(self, mock_qdrant_client, mock_embedding):
-        with patch("services.scraper.ingest.get_qdrant_client", return_value=mock_qdrant_client):
+        with patch("services.scraper.ingest.get_qdrant_client", return_value=mock_qdrant_client), \
+             patch("services.tasks.match_task.batch_match_new_jobs") as mock_match:
+            mock_match.delay.return_value = None
             jobs = [
                 {"title": "Job 1", "company": "C1", "description": "Desc 1"},
                 {"title": "Job 2", "company": "C2", "description": "Desc 2"},
@@ -96,7 +97,9 @@ class TestIngestJobBatch:
             assert ids == []
 
     def test_handles_missing_fields(self, mock_qdrant_client, mock_embedding):
-        with patch("services.scraper.ingest.get_qdrant_client", return_value=mock_qdrant_client):
+        with patch("services.scraper.ingest.get_qdrant_client", return_value=mock_qdrant_client), \
+             patch("services.tasks.match_task.batch_match_new_jobs") as mock_match:
+            mock_match.delay.return_value = None
             jobs = [{"description": "Only description"}]
             ids = ingest_job_batch(jobs)
             assert len(ids) == 1

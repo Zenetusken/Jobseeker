@@ -121,9 +121,11 @@ def render():
                 try:
                     submit_result = api_post("/api/submit/apply", {
                         "job_id": st.session_state.get("rewrite_job_id", ""),
-                        "resume_id": "from_session",
+                        "resume_id": st.session_state.get("current_resume_id", ""),
                         "tailored_resume": tailored,
                         "job_url": job_url,
+                        "job_title": st.session_state.get("rewrite_job_title", ""),
+                        "company": st.session_state.get("rewrite_company", ""),
                     })
                     task_id = submit_result.get("task_id", "")
                     st.success(f"✅ Application dispatched! Task ID: {task_id}")

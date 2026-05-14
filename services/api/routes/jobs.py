@@ -1,10 +1,12 @@
 """
 Job Routes — Ingest, list, and manage job descriptions.
 """
+import uuid
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
 from loguru import logger
+from qdrant_client.models import PointIdsList
 
 from services.scraper.ingest import ingest_job_text, ingest_job_batch
 from services.qdrant.init_collections import get_qdrant_client
@@ -115,42 +117,35 @@ async def list_jobs(
 async def get_job(job_id: str):
     """Get full job details by ID."""
     client = get_qdrant_client()
-    records, _ = client.scroll(
+    results = client.retrieve(
         collection_name=settings.qdrant_collection_jobs,
-        scroll_filter=None,
-        limit=1,
+        ids=[job_id],
         with_payload=True,
         with_vectors=False,
     )
-    # Qdrant uses integer/uuid IDs; try both
-    try:
-        job_id_int = int(job_id)
-    except ValueError:
-        job_id_int = job_id
-
-    for r in records:
-        if str(r.id) == str(job_id_int):
-            return {
-                "id": r.id,
-                "title": r.payload.get("title", ""),
-                "company": r.payload.get("company", ""),
-                "location": r.payload.get("location", ""),
-                "description": r.payload.get("description", ""),
-                "source": r.payload.get("source", ""),
-                "url": r.payload.get("url", ""),
-                "required_certs": r.payload.get("required_certs", []),
-                "required_skills": r.payload.get("required_skills", []),
-                "clearance_level": r.payload.get("clearance_level", ""),
-            }
-    raise HTTPException(status_code=404, detail="Job not found")
+    if not results:
+        raise HTTPException(status_code=404, detail="Job not found")
+    r = results[0]
+    return {
+        "id": r.id,
+        "title": r.payload.get("title", ""),
+        "company": r.payload.get("company", ""),
+        "location": r.payload.get("location", ""),
+        "description": r.payload.get("description", ""),
+        "source": r.payload.get("source", ""),
+        "url": r.payload.get("url", ""),
+        "required_certs": r.payload.get("required_certs", []),
+        "required_skills": r.payload.get("required_skills", []),
+        "clearance_level": r.payload.get("clearance_level", ""),
+    }
 
 
 @router.delete("/{job_id}")
-async def delete_job(job_id: int):
+async def delete_job(job_id: str):
     """Delete a job by ID."""
     client = get_qdrant_client()
     client.delete(
         collection_name=settings.qdrant_collection_jobs,
-        points_selector=[job_id],
+        points_selector=PointIdsList(points=[job_id]),
     )
     return {"status": "deleted", "job_id": job_id}

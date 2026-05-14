@@ -13,6 +13,7 @@ celery_app = Celery(
     include=[
         "services.tasks.submit_task",
         "services.tasks.scrape_task",
+        "services.tasks.match_task",
     ],
 )
 

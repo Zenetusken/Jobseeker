@@ -86,9 +86,13 @@ def render():
                                 rewrite_data = api_post("/api/rewrite/tailor", {
                                     "resume_id": resume_id,
                                     "job_id": match["job_id"],
+                                    "match_score": match.get("score", 0.0),
                                 })
                                 st.session_state["rewrite_result"] = rewrite_data
                                 st.session_state["rewrite_job_id"] = match["job_id"]
+                                st.session_state["rewrite_job_title"] = match.get("title", "")
+                                st.session_state["rewrite_company"] = match.get("company", "")
+                                st.session_state["current_resume_id"] = resume_id
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Rewrite failed: {e}")

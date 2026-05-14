@@ -210,7 +210,7 @@ class TestRewriteResumeForJob:
         assert len(result.diff) > 0
 
     def test_job_not_found_raises(self, mock_qdrant_client):
-        mock_qdrant_client.scroll.return_value = ([], None)
+        mock_qdrant_client.retrieve.return_value = []
 
         with pytest.raises(ValueError, match="Job not found"):
             rewrite_resume_for_job("resume-1", "nonexistent-job")

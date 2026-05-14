@@ -31,3 +31,10 @@ def api_upload(path: str, file_bytes: bytes, filename: str, params: Optional[dic
         r = client.post(_url(path), files=files, params=params)
         r.raise_for_status()
         return r.json()
+
+
+def api_delete(path: str) -> dict:
+    with httpx.Client(timeout=30) as client:
+        r = client.delete(_url(path))
+        r.raise_for_status()
+        return r.json()

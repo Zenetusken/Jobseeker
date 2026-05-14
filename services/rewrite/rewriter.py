@@ -41,38 +41,28 @@ def _get_vllm_client() -> OpenAI:
 
 
 def _fetch_job_and_resume(job_id: str, resume_id: str) -> tuple[dict, dict]:
-    """Fetch job and resume payloads from Qdrant."""
+    """Fetch job and resume payloads from Qdrant by ID (O(1) lookups)."""
     client = get_qdrant_client()
 
-    # Fetch job
-    job_records, _ = client.scroll(
+    job_results = client.retrieve(
         collection_name=settings.qdrant_collection_jobs,
-        limit=200,
+        ids=[job_id],
         with_payload=True,
         with_vectors=False,
     )
-    job_payload = None
-    for r in job_records:
-        if str(r.id) == str(job_id):
-            job_payload = r.payload or {}
-            break
-    if job_payload is None:
+    if not job_results:
         raise ValueError(f"Job not found: {job_id}")
+    job_payload = job_results[0].payload or {}
 
-    # Fetch resume
-    resume_records, _ = client.scroll(
+    resume_results = client.retrieve(
         collection_name=settings.qdrant_collection_resumes,
-        limit=100,
+        ids=[resume_id],
         with_payload=True,
         with_vectors=False,
     )
-    resume_payload = None
-    for r in resume_records:
-        if str(r.id) == str(resume_id):
-            resume_payload = r.payload or {}
-            break
-    if resume_payload is None:
+    if not resume_results:
         raise ValueError(f"Resume not found: {resume_id}")
+    resume_payload = resume_results[0].payload or {}
 
     return job_payload, resume_payload
 
@@ -236,23 +226,29 @@ def _compute_diff(original_resume: dict, rewrite: RewriteOutput) -> list[dict]:
     return diffs
 
 
-def rewrite_resume_for_job(resume_id: str, job_id: str) -> RewriteResult:
+def rewrite_resume_for_job(
+    resume_id: str,
+    job_id: str,
+    match_score: float = 0.0,
+) -> RewriteResult:
     """
     Full rewrite pipeline:
     1. Fetch job + resume from Qdrant
     2. Build prompt with JSON schema
     3. Call vLLM with T=0.0 + Outlines constraint
     4. Parse output and compute diff
+
+    Pass match_score if already known to avoid a redundant vector search.
     """
     job_payload, resume_payload = _fetch_job_and_resume(job_id, resume_id)
 
-    # Get match score
-    matches = match_jobs_to_resume(resume_id, top_k=100, min_score=0.0)
-    match_score = 0.0
-    for m in matches:
-        if str(m.job_id) == str(job_id):
-            match_score = m.score
-            break
+    # Only run vector search when caller didn't supply the score
+    if match_score == 0.0:
+        matches = match_jobs_to_resume(resume_id, top_k=100, min_score=0.0)
+        for m in matches:
+            if str(m.job_id) == str(job_id):
+                match_score = m.score
+                break
 
     system_prompt, user_prompt = _build_prompt(job_payload, resume_payload)
     rewrite = _call_vllm(system_prompt, user_prompt)

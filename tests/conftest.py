@@ -172,6 +172,7 @@ def mock_qdrant_client():
     client = MagicMock()
     client.scroll.return_value = ([], None)
     client.search.return_value = []
+    client.retrieve.return_value = []
     client.collection_exists.return_value = True
 
     # Patch everywhere get_qdrant_client is imported

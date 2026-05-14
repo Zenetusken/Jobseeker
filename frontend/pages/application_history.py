@@ -4,40 +4,68 @@ Application History Page — Track submitted applications and their status.
 import streamlit as st
 from frontend.api_client import api_get
 
+STATUS_COLORS = {
+    "queued": "🟡",
+    "started": "🔵",
+    "success": "🟢",
+    "submitted": "🟢",
+    "failed": "🔴",
+    "retry": "🟠",
+}
+
 
 def render():
     st.title("📊 Application History")
     st.caption("Track your submitted applications")
 
-    # In production, this would query a persistent database.
-    # For MVP, we show a placeholder with the architecture explanation.
+    col_refresh, _ = st.columns([1, 5])
+    with col_refresh:
+        if st.button("🔄 Refresh", use_container_width=True):
+            st.rerun()
 
-    st.info(
-        "Application history is tracked via Celery task results in Redis. "
-        "Each submission creates a task with status: queued → processing → submitted/failed."
-    )
+    try:
+        data = api_get("/api/submit/history", params={"limit": 50})
+        submissions = data.get("submissions", [])
+    except Exception as e:
+        st.error(f"Could not load history: {e}")
+        submissions = []
 
-    # Simulated history for demo
-    with st.container(border=True):
-        st.subheader("Recent Submissions")
-        st.caption("Submissions will appear here after you approve and submit applications.")
+    if not submissions:
+        st.info(
+            "No submissions yet. Go to **Staged Applications** → Tailor → "
+            "**Review & Approve** → submit your first application."
+        )
+    else:
+        st.caption(f"Showing {len(submissions)} submission(s)")
 
-        col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
-        with col1:
-            st.markdown("**Job Title**")
-        with col2:
-            st.markdown("**Company**")
-        with col3:
-            st.markdown("**Status**")
-        with col4:
-            st.markdown("**Date**")
+        with st.container(border=True):
+            header_cols = st.columns([3, 2, 1, 2])
+            header_cols[0].markdown("**Job Title**")
+            header_cols[1].markdown("**Company**")
+            header_cols[2].markdown("**Status**")
+            header_cols[3].markdown("**Submitted At**")
+            st.divider()
 
-        st.divider()
-        st.caption("No submissions yet. Go to 'Review & Approve' to submit your first application.")
+            for sub in submissions:
+                status = sub.get("status", "queued").lower()
+                icon = STATUS_COLORS.get(status, "⚪")
+                cols = st.columns([3, 2, 1, 2])
+                cols[0].markdown(sub.get("job_title", "Unknown Position"))
+                cols[1].markdown(sub.get("company", "Unknown"))
+                cols[2].markdown(f"{icon} {status}")
+                submitted_at = sub.get("submitted_at", "")
+                if submitted_at:
+                    submitted_at = submitted_at.replace("T", " ")[:16]
+                cols[3].markdown(submitted_at or "—")
+
+                error = sub.get("error")
+                if error:
+                    with st.expander(f"❌ Error — {sub.get('job_title', '')}"):
+                        st.code(error)
 
     st.divider()
 
-    # Task status checker
+    # Task status deep-dive
     st.subheader("Check Task Status")
     task_id = st.text_input("Celery Task ID", placeholder="e.g., abc123-def456")
     if task_id and st.button("Check Status"):

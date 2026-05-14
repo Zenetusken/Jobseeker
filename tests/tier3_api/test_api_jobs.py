@@ -94,7 +94,7 @@ class TestJobsAPI:
             "required_skills": ["SIEM"],
             "clearance_level": "Secret",
         }
-        mock_qdrant_client.scroll.return_value = ([mock_record], None)
+        mock_qdrant_client.retrieve.return_value = [mock_record]
 
         response = await test_app.get("/api/jobs/job-1")
         assert response.status_code == 200
@@ -103,7 +103,7 @@ class TestJobsAPI:
 
     @pytest.mark.asyncio
     async def test_get_job_not_found(self, test_app, mock_qdrant_client):
-        mock_qdrant_client.scroll.return_value = ([], None)
+        mock_qdrant_client.retrieve.return_value = []
 
         response = await test_app.get("/api/jobs/nonexistent")
         assert response.status_code == 404

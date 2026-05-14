@@ -142,22 +142,18 @@ class TestHardFilter:
 
 class TestMatchJobsToResume:
     def test_returns_matches(self, mock_qdrant_client, mock_embedding):
-        # Setup mock Qdrant to return a resume and job search results
         from qdrant_client.models import ScoredPoint
 
-        # Mock resume scroll
-        mock_qdrant_client.scroll.side_effect = [
-            # First call: resume scroll
-            ([MagicMock(id="resume-1", payload={
+        # Mock resume retrieve (O(1) lookup)
+        mock_qdrant_client.retrieve.return_value = [
+            MagicMock(id="resume-1", payload={
                 "raw_text": "Security engineer with CISSP",
                 "certs": ["CISSP"],
                 "skills": ["SIEM"],
                 "clearance_level": "Top Secret",
-            })], None),
-            # Second call: job search not via scroll but via search()
+            })
         ]
 
-        # Mock search results
         mock_hit = ScoredPoint(
             id="job-1",
             version=0,
@@ -185,10 +181,9 @@ class TestMatchJobsToResume:
     def test_respects_min_score(self, mock_qdrant_client, mock_embedding):
         from qdrant_client.models import ScoredPoint
 
-        mock_qdrant_client.scroll.return_value = (
-            [MagicMock(id="resume-1", payload={"raw_text": "text", "certs": [], "skills": [], "clearance_level": ""})],
-            None,
-        )
+        mock_qdrant_client.retrieve.return_value = [
+            MagicMock(id="resume-1", payload={"raw_text": "text", "certs": [], "skills": [], "clearance_level": ""})
+        ]
 
         mock_qdrant_client.search.return_value = [
             ScoredPoint(id="job-1", version=0, score=0.2, payload={"title": "T", "company": "C", "required_certs": [], "required_skills": [], "clearance_level": ""}),
@@ -200,16 +195,15 @@ class TestMatchJobsToResume:
         assert results[0].job_id == "job-2"
 
     def test_empty_resume_text_raises(self, mock_qdrant_client, mock_embedding):
-        mock_qdrant_client.scroll.return_value = (
-            [MagicMock(id="resume-1", payload={"raw_text": "", "certs": [], "skills": []})],
-            None,
-        )
+        mock_qdrant_client.retrieve.return_value = [
+            MagicMock(id="resume-1", payload={"raw_text": "", "certs": [], "skills": []})
+        ]
 
         with pytest.raises(ValueError, match="no text content"):
             match_jobs_to_resume("resume-1")
 
     def test_resume_not_found_raises(self, mock_qdrant_client):
-        mock_qdrant_client.scroll.return_value = ([], None)
+        mock_qdrant_client.retrieve.return_value = []
 
         with pytest.raises(ValueError, match="Resume not found"):
             match_jobs_to_resume("nonexistent")
@@ -217,10 +211,9 @@ class TestMatchJobsToResume:
     def test_sorts_hard_filter_pass_first(self, mock_qdrant_client, mock_embedding):
         from qdrant_client.models import ScoredPoint
 
-        mock_qdrant_client.scroll.return_value = (
-            [MagicMock(id="resume-1", payload={"raw_text": "text", "certs": ["CISSP"], "skills": [], "clearance_level": ""})],
-            None,
-        )
+        mock_qdrant_client.retrieve.return_value = [
+            MagicMock(id="resume-1", payload={"raw_text": "text", "certs": ["CISSP"], "skills": [], "clearance_level": ""})
+        ]
 
         mock_qdrant_client.search.return_value = [
             ScoredPoint(id="job-1", version=0, score=0.5, payload={"title": "T1", "company": "C1", "required_certs": ["CEH"], "required_skills": [], "clearance_level": ""}),
@@ -228,7 +221,6 @@ class TestMatchJobsToResume:
         ]
 
         results = match_jobs_to_resume("resume-1", top_k=10, min_score=0.0)
-        # job-2 should be first (hard_filter_pass=True) even though lower score
         assert results[0].job_id == "job-2"
         assert results[0].hard_filter_pass is True
         assert results[1].job_id == "job-1"

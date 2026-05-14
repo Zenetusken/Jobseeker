@@ -1,6 +1,7 @@
 """
 Scrape Task — Periodic Celery task for job scraping.
 """
+from celery.exceptions import MaxRetriesExceededError
 from celery.utils.log import get_task_logger
 from services.tasks.celery_app import celery_app
 from services.scraper.scraper import scrape_sync
@@ -25,6 +26,9 @@ def scrape_and_ingest_jobs(self):
         else:
             logger.warning("No jobs scraped")
             return {"status": "empty", "count": 0}
+    except MaxRetriesExceededError:
+        logger.error("Scrape task exhausted all retries — giving up")
+        return {"status": "failed", "error": "max_retries_exceeded"}
     except Exception as e:
         logger.error(f"Scrape task failed: {e}")
         raise self.retry(exc=e, countdown=300, max_retries=3)

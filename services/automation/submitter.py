@@ -12,6 +12,17 @@ from services.automation.dom_mapper import build_field_mapping, extract_value_fo
 from services.automation.pdf_generator import generate_tailored_resume_pdf
 
 
+def _apply_stealth_sync(page) -> None:
+    """Apply playwright-stealth to a sync page if enabled and available."""
+    if not settings.playwright_stealth_enabled:
+        return
+    try:
+        from playwright_stealth import stealth_sync
+        stealth_sync(page)
+    except ImportError:
+        logger.debug("playwright-stealth not available — skipping stealth")
+
+
 def submit_application(
     job_url: str,
     tailored_resume: dict,
@@ -66,6 +77,7 @@ def submit_application(
                 viewport={"width": 1920, "height": 1080},
             )
             page = context.new_page()
+            _apply_stealth_sync(page)
 
             # Navigate to application URL
             logger.info(f"Navigating to: {job_url}")

@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   # ============================================================
   # vLLM Inference Engine — Foundation-Sec-8B (AWQ 4-bit)
@@ -91,6 +89,7 @@ services:
       context: .
       dockerfile: Dockerfile.orchestrator
     container_name: jobseeker-orchestrator
+    runtime: nvidia
     ports:
       - "${API_PORT:-8001}:8001"
     volumes:
@@ -98,6 +97,7 @@ services:
       - ./data/uploads:/app/data/uploads
       - ./data/outputs:/app/data/outputs
     environment:
+      - NVIDIA_VISIBLE_DEVICES=all
       - VLLM_HOST=${VLLM_HOST:-vllm-engine}
       - VLLM_PORT=${VLLM_PORT:-8000}
       - QDRANT_HOST=${QDRANT_HOST:-qdrant}
@@ -106,8 +106,13 @@ services:
       - REDIS_PORT=${REDIS_PORT:-6379}
       - EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME:-mixedbread-ai/mxbai-embed-large-v1}
       - EMBEDDING_DEVICE=${EMBEDDING_DEVICE:-cuda}
-      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
-      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     depends_on:
       vllm-engine:
         condition: service_healthy
@@ -127,12 +132,14 @@ services:
       context: .
       dockerfile: Dockerfile.orchestrator
     container_name: jobseeker-celery
+    runtime: nvidia
     command: celery -A services.tasks.celery_app worker --loglevel=info --concurrency=2
     volumes:
       - ./services:/app/services:ro
       - ./data/uploads:/app/data/uploads
       - ./data/outputs:/app/data/outputs
     environment:
+      - NVIDIA_VISIBLE_DEVICES=all
       - VLLM_HOST=${VLLM_HOST:-vllm-engine}
       - VLLM_PORT=${VLLM_PORT:-8000}
       - QDRANT_HOST=${QDRANT_HOST:-qdrant}
@@ -141,10 +148,15 @@ services:
       - REDIS_PORT=${REDIS_PORT:-6379}
       - EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME:-mixedbread-ai/mxbai-embed-large-v1}
       - EMBEDDING_DEVICE=${EMBEDDING_DEVICE:-cuda}
-      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
-      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
       - PLAYWRIGHT_HEADLESS=${PLAYWRIGHT_HEADLESS:-true}
       - PLAYWRIGHT_TIMEOUT_MS=${PLAYWRIGHT_TIMEOUT_MS:-30000}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     depends_on:
       vllm-engine:
         condition: service_healthy

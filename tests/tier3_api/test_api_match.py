@@ -38,7 +38,7 @@ class TestMatchAPI:
             )
         ]
 
-        mock_qdrant_client.scroll.return_value = ([mock_resume], None)
+        mock_qdrant_client.retrieve.return_value = [mock_resume]
 
         response = await test_app.post("/api/match/jobs", json={
             "resume_id": "resume-1",
@@ -53,7 +53,7 @@ class TestMatchAPI:
 
     @pytest.mark.asyncio
     async def test_match_resume_not_found(self, test_app, mock_qdrant_client):
-        mock_qdrant_client.scroll.return_value = ([], None)
+        mock_qdrant_client.retrieve.return_value = []
 
         response = await test_app.post("/api/match/jobs", json={
             "resume_id": "nonexistent",
@@ -90,7 +90,7 @@ class TestMatchAPI:
                 },
             )
         ]
-        mock_qdrant_client.scroll.return_value = ([mock_resume], None)
+        mock_qdrant_client.retrieve.return_value = [mock_resume]
 
         response = await test_app.get("/api/match/job/job-1", params={"resume_id": "resume-1"})
         assert response.status_code == 200
@@ -109,7 +109,7 @@ class TestMatchAPI:
         }
 
         mock_qdrant_client.search.return_value = []
-        mock_qdrant_client.scroll.return_value = ([mock_resume], None)
+        mock_qdrant_client.retrieve.return_value = [mock_resume]
 
         response = await test_app.get("/api/match/job/nonexistent", params={"resume_id": "resume-1"})
         assert response.status_code == 404

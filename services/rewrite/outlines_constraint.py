@@ -42,30 +42,6 @@ def get_json_schema_for_prompt() -> str:
     return build_json_schema_description(RewriteOutput)
 
 
-def create_outlines_generator():
-    """
-    Create an Outlines JSON generator for RewriteOutput.
-    This returns a generator function that can be used with vLLM.
-    
-    Note: Outlines integration with vLLM requires outlines >= 0.1.x
-    and the vLLM OpenAI-compatible server. The actual constraint is
-    applied via the `guided_json` parameter in the OpenAI API call.
-    """
-    try:
-        from outlines import models, generate
-        
-        # For vLLM OpenAI-compatible API, we use guided_json
-        # This is passed as an extra parameter to the chat completion
-        json_schema = RewriteOutput.model_json_schema()
-        return json_schema
-    except ImportError:
-        logger.warning(
-            "Outlines not installed. JSON validation will be post-generation only. "
-            "Install with: pip install outlines"
-        )
-        return RewriteOutput.model_json_schema()
-
-
 def apply_outlines_constraint_to_request(request_kwargs: dict) -> dict:
     """
     Add Outlines JSON constraint to the vLLM API request.

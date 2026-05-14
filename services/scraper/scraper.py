@@ -9,6 +9,17 @@ from loguru import logger
 from config.settings import settings
 
 
+async def _apply_stealth(page) -> None:
+    """Apply playwright-stealth to a page if stealth is enabled and available."""
+    if not settings.playwright_stealth_enabled:
+        return
+    try:
+        from playwright_stealth import stealth_async
+        await stealth_async(page)
+    except ImportError:
+        logger.debug("playwright-stealth not available — skipping stealth")
+
+
 async def scrape_indeed(
     query: str = "cybersecurity",
     location: str = "Remote",
@@ -32,6 +43,7 @@ async def scrape_indeed(
                 )
             )
             page = await context.new_page()
+            await _apply_stealth(page)
 
             search_url = (
                 f"https://www.indeed.com/jobs?q={query}&l={location}&filter=0"
@@ -94,6 +106,7 @@ async def scrape_linkedin(
             browser = await p.chromium.launch(headless=settings.playwright_headless)
             context = await browser.new_context()
             page = await context.new_page()
+            await _apply_stealth(page)
 
             search_url = (
                 f"https://www.linkedin.com/jobs/search/"
@@ -153,6 +166,7 @@ async def scrape_dice(
             browser = await p.chromium.launch(headless=settings.playwright_headless)
             context = await browser.new_context()
             page = await context.new_page()
+            await _apply_stealth(page)
 
             search_url = f"https://www.dice.com/jobs?q={query}&countryCode=US"
             logger.info(f"Scraping Dice: {search_url}")

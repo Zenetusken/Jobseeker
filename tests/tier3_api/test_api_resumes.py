@@ -111,7 +111,7 @@ class TestResumesAPI:
             "skills": ["SIEM"],
             "clearance_level": "",
         }
-        mock_qdrant_client.scroll.return_value = ([mock_record], None)
+        mock_qdrant_client.retrieve.return_value = [mock_record]
 
         response = await test_app.get("/api/resumes/resume-1")
         assert response.status_code == 200
@@ -120,7 +120,7 @@ class TestResumesAPI:
 
     @pytest.mark.asyncio
     async def test_get_resume_not_found(self, test_app, mock_qdrant_client):
-        mock_qdrant_client.scroll.return_value = ([], None)
+        mock_qdrant_client.retrieve.return_value = []
 
         response = await test_app.get("/api/resumes/nonexistent")
         assert response.status_code == 404

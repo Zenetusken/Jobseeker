@@ -3,7 +3,7 @@ My Resumes Page — Upload and manage candidate resumes.
 """
 import streamlit as st
 import json
-from frontend.api_client import api_get, api_post, api_upload
+from frontend.api_client import api_get, api_post, api_upload, api_delete
 
 
 def render():
@@ -114,10 +114,11 @@ def render():
                             st.caption(f"ID: {resume['id'][:8]}...")
                             if st.button("🗑️ Delete", key=f"del_{resume['id']}"):
                                 try:
-                                    api_get(f"/api/resumes/{resume['id']}")
-                                    st.rerun()
-                                except Exception:
-                                    st.rerun()
+                                    api_delete(f"/api/resumes/{resume['id']}")
+                                    st.success("Deleted.")
+                                except Exception as e:
+                                    st.error(f"Delete failed: {e}")
+                                st.rerun()
         except Exception as e:
             st.error(f"Failed to load resumes: {e}")
 

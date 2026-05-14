@@ -84,11 +84,29 @@ def extract_value_for_field(resume_key: str, tailored_resume: dict) -> Optional[
     return None
 
 
+def _build_specific_selector(el, selector: str, index: int) -> str:
+    """
+    Build the most specific CSS selector for an element.
+    Prefers name/id attributes; falls back to nth-of-type to avoid
+    selecting the wrong element when the generic tag matches multiple fields.
+    """
+    name = el.get_attribute("name") or ""
+    id_attr = el.get_attribute("id") or ""
+    if name:
+        tag = selector.split("[")[0].split(":")[0]
+        return f"{tag}[name='{name}']"
+    if id_attr:
+        return f"#{id_attr}"
+    # nth-of-type fallback so we target the exact element
+    base_tag = selector.split("[")[0].split(":")[0]
+    return f"{base_tag}:nth-of-type({index + 1})"
+
+
 def build_field_mapping(page) -> dict[str, str]:
     """
     Scan the page for form fields and build a mapping from
-    resume keys to CSS selectors.
-    Returns {resume_key: selector}.
+    resume keys to element-specific CSS selectors.
+    Returns {resume_key: specific_selector}.
     """
     mapping = {}
 
@@ -104,7 +122,7 @@ def build_field_mapping(page) -> dict[str, str]:
 
     for selector in input_selectors:
         elements = page.query_selector_all(selector)
-        for el in elements:
+        for idx, el in enumerate(elements):
             # Try multiple ways to identify the field
             name = el.get_attribute("name") or ""
             id_attr = el.get_attribute("id") or ""
@@ -113,17 +131,19 @@ def build_field_mapping(page) -> dict[str, str]:
 
             # Also check associated label
             label_text = ""
-            label_el = page.query_selector(f"label[for='{id_attr}']")
-            if label_el:
-                label_text = label_el.inner_text()
+            if id_attr:
+                label_el = page.query_selector(f"label[for='{id_attr}']")
+                if label_el:
+                    label_text = label_el.inner_text()
 
-            # Try to match
+            # Try to match using most-to-least-specific attributes
             for attr in [name, id_attr, placeholder, aria_label, label_text]:
                 if attr:
                     resume_key = match_field_to_resume_key(attr)
                     if resume_key and resume_key not in mapping:
-                        mapping[resume_key] = selector
-                        logger.debug(f"Mapped '{attr}' -> {resume_key}")
+                        specific_selector = _build_specific_selector(el, selector, idx)
+                        mapping[resume_key] = specific_selector
+                        logger.debug(f"Mapped '{attr}' -> {resume_key} ({specific_selector})")
                         break
 
     return mapping

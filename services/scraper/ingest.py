@@ -3,6 +3,7 @@ Job Ingestion — Embed and store job descriptions in Qdrant.
 """
 import uuid
 from loguru import logger
+from qdrant_client.models import PointStruct
 
 from services.embeddings.embedding_service import encode_text
 from services.scraper.metadata_extractor import extract_all_metadata
@@ -34,26 +35,28 @@ def ingest_job_text(
 
     client.upsert(
         collection_name=settings.qdrant_collection_jobs,
-        points=[{
-            "id": point_id,
-            "vector": embedding,
-            "payload": {
-                "title": title,
-                "company": company,
-                "location": location,
-                "description": description,
-                "url": url,
-                "source": source,
-                **metadata,
-            },
-        }],
+        points=[
+            PointStruct(
+                id=point_id,
+                vector=embedding,
+                payload={
+                    "title": title,
+                    "company": company,
+                    "location": location,
+                    "description": description,
+                    "url": url,
+                    "source": source,
+                    **metadata,
+                },
+            )
+        ],
     )
 
     logger.info(f"Ingested job: {title} @ {company} [{point_id}]")
     return point_id
 
 
-def ingest_job_batch(jobs: list[dict]) -> list[str]:
+def ingest_job_batch(jobs: list[dict], trigger_match: bool = True) -> list[str]:
     """Embed and store multiple job descriptions."""
     job_ids = []
     for job in jobs:
@@ -66,4 +69,13 @@ def ingest_job_batch(jobs: list[dict]) -> list[str]:
             source=job.get("source", "batch"),
         )
         job_ids.append(jid)
+
+    if job_ids and trigger_match:
+        try:
+            from services.tasks.match_task import batch_match_new_jobs
+            batch_match_new_jobs.delay(job_ids)
+            logger.info(f"Dispatched batch_match_new_jobs for {len(job_ids)} jobs")
+        except Exception as e:
+            logger.warning(f"Could not dispatch batch_match task: {e}")
+
     return job_ids

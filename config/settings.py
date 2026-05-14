@@ -30,8 +30,6 @@ class Settings(BaseSettings):
     # Redis / Celery
     redis_host: str = "redis"
     redis_port: int = 6379
-    celery_broker_url: str = "redis://redis:6379/0"
-    celery_result_backend: str = "redis://redis:6379/0"
 
     # Scraper
     scraper_schedule_hours: int = 6
@@ -58,6 +56,14 @@ class Settings(BaseSettings):
     @property
     def qdrant_url(self) -> str:
         return f"http://{self.qdrant_host}:{self.qdrant_port}"
+
+    @property
+    def celery_broker_url(self) -> str:
+        return f"redis://{self.redis_host}:{self.redis_port}/0"
+
+    @property
+    def celery_result_backend(self) -> str:
+        return f"redis://{self.redis_host}:{self.redis_port}/0"
 
     class Config:
         env_file = ".env"

@@ -1,10 +1,12 @@
 """
 Resume Routes — Upload, parse, and manage candidate resumes.
 """
+import uuid
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from loguru import logger
+from qdrant_client.models import PointIdsList, PointStruct
 
 from services.resume.parser import parse_resume_file, parse_resume_json
 from services.resume.schema import ResumeSchema
@@ -42,24 +44,25 @@ async def upload_resume_file(file: UploadFile = File(...), label: str = "default
 
     # Store in Qdrant
     client = get_qdrant_client()
-    import uuid
     point_id = str(uuid.uuid4())
 
     client.upsert(
         collection_name=settings.qdrant_collection_resumes,
-        points=[{
-            "id": point_id,
-            "vector": embedding,
-            "payload": {
-                "label": label,
-                "filename": file.filename,
-                "raw_text": full_text,
-                "structured": parsed.get("structured"),
-                "certs": parsed.get("certs", []),
-                "skills": parsed.get("skills", []),
-                "clearance_level": parsed.get("clearance_level", ""),
-            },
-        }],
+        points=[
+            PointStruct(
+                id=point_id,
+                vector=embedding,
+                payload={
+                    "label": label,
+                    "filename": file.filename,
+                    "raw_text": full_text,
+                    "structured": parsed.get("structured"),
+                    "certs": parsed.get("certs", []),
+                    "skills": parsed.get("skills", []),
+                    "clearance_level": parsed.get("clearance_level", ""),
+                },
+            )
+        ],
     )
 
     return {
@@ -84,24 +87,25 @@ async def upload_resume_json(req: ResumeJsonUpload):
     embedding = encode_text(full_text)
 
     client = get_qdrant_client()
-    import uuid
     point_id = str(uuid.uuid4())
 
     client.upsert(
         collection_name=settings.qdrant_collection_resumes,
-        points=[{
-            "id": point_id,
-            "vector": embedding,
-            "payload": {
-                "label": req.label,
-                "filename": "json_upload",
-                "raw_text": full_text,
-                "structured": req.resume.model_dump(),
-                "certs": parsed.get("certs", []),
-                "skills": parsed.get("skills", []),
-                "clearance_level": parsed.get("clearance_level", ""),
-            },
-        }],
+        points=[
+            PointStruct(
+                id=point_id,
+                vector=embedding,
+                payload={
+                    "label": req.label,
+                    "filename": "json_upload",
+                    "raw_text": full_text,
+                    "structured": req.resume.model_dump(),
+                    "certs": parsed.get("certs", []),
+                    "skills": parsed.get("skills", []),
+                    "clearance_level": parsed.get("clearance_level", ""),
+                },
+            )
+        ],
     )
 
     return {
@@ -142,26 +146,25 @@ async def list_resumes():
 async def get_resume(resume_id: str):
     """Get full resume details."""
     client = get_qdrant_client()
-    records, _ = client.scroll(
+    results = client.retrieve(
         collection_name=settings.qdrant_collection_resumes,
-        limit=100,
+        ids=[resume_id],
         with_payload=True,
         with_vectors=False,
     )
-
-    for r in records:
-        if str(r.id) == resume_id:
-            return {
-                "id": r.id,
-                "label": r.payload.get("label", ""),
-                "filename": r.payload.get("filename", ""),
-                "raw_text": r.payload.get("raw_text", ""),
-                "structured": r.payload.get("structured"),
-                "certs": r.payload.get("certs", []),
-                "skills": r.payload.get("skills", []),
-                "clearance_level": r.payload.get("clearance_level", ""),
-            }
-    raise HTTPException(status_code=404, detail="Resume not found")
+    if not results:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    r = results[0]
+    return {
+        "id": r.id,
+        "label": r.payload.get("label", ""),
+        "filename": r.payload.get("filename", ""),
+        "raw_text": r.payload.get("raw_text", ""),
+        "structured": r.payload.get("structured"),
+        "certs": r.payload.get("certs", []),
+        "skills": r.payload.get("skills", []),
+        "clearance_level": r.payload.get("clearance_level", ""),
+    }
 
 
 @router.delete("/{resume_id}")
@@ -170,6 +173,6 @@ async def delete_resume(resume_id: str):
     client = get_qdrant_client()
     client.delete(
         collection_name=settings.qdrant_collection_resumes,
-        points_selector=[resume_id],
+        points_selector=PointIdsList(points=[resume_id]),
     )
     return {"status": "deleted", "resume_id": resume_id}
