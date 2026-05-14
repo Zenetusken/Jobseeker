@@ -1,10 +1,10 @@
 # Jobseeker AI — Localized Cybersecurity Resume Automation
 
-> **v0.0.2-beta** — Audit-hardened release: critical runtime bug fixes, O(1) Qdrant lookups, real submission history, playwright-stealth scraping, and comprehensive code-quality cleanup.
+> **v0.0.3-beta** — Security hardening, full job description pipeline, FSM/JSON strictness, dependency sweep to latest, Python 3.13.
 
-[![Tests](https://img.shields.io/badge/tests-298%20passed-brightgreen)](./tests)
+[![Tests](https://img.shields.io/badge/tests-386%20passed-brightgreen)](./tests)
 [![Coverage](https://img.shields.io/badge/coverage-77%25-yellowgreen)](./htmlcov)
-[![Python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org)
+[![Python](https://img.shields.io/badge/python-3.13-blue)](https://www.python.org)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](./LICENSE)
 
 ---
@@ -172,6 +172,7 @@ QDRANT_COLLECTION_RESUMES=resumes
 # Redis / Celery
 REDIS_HOST=redis
 REDIS_PORT=6379
+REDIS_PASSWORD=change-me-strong-redis-password   # required in production
 
 # Scraper
 SCRAPER_SCHEDULE_HOURS=6
@@ -180,7 +181,23 @@ SCRAPER_SOURCES=indeed,linkedin,dice
 # Playwright
 PLAYWRIGHT_HEADLESS=true
 PLAYWRIGHT_TIMEOUT_MS=30000
-PLAYWRIGHT_STEALTH_ENABLED=true   # requires: pip install playwright-stealth
+PLAYWRIGHT_STEALTH_ENABLED=true
+
+# Security — REQUIRED for production (change ALL values)
+API_KEY=change-me-to-a-long-random-secret   # X-API-Key header auth; empty = dev mode
+API_DEBUG=false                              # set true to enable /docs, /redoc
+ALLOWED_ORIGINS=                            # blank = deny all cross-origin requests
+QDRANT_API_KEY=change-me-qdrant-api-key
+
+# Upload / validation limits
+MAX_UPLOAD_BYTES=10485760    # 10 MB
+MAX_DESCRIPTION_LENGTH=50000
+MAX_BATCH_SIZE=100
+```
+
+Generate secrets with:
+```bash
+python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
 
 ---
@@ -188,21 +205,22 @@ PLAYWRIGHT_STEALTH_ENABLED=true   # requires: pip install playwright-stealth
 ## Makefile Commands
 
 ```bash
-make up          # Build and start all services
-make down        # Stop all services
-make logs        # Tail all service logs
-make logs-vllm   # Stream vLLM engine logs only
-make status      # Health check across all services
-make init-db     # Initialize Qdrant collections
-make reset-db    # WARNING: wipe all stored jobs and resumes
-make clean       # Remove containers, volumes, and build cache
+make up             # Build and start all services
+make down           # Stop all services
+make logs           # Tail all service logs
+make logs-vllm      # Stream vLLM engine logs only
+make status         # Health check across all services
+make init-db        # Initialize Qdrant collections
+make reset-db       # WARNING: wipe all stored jobs and resumes
+make clean          # Remove containers, volumes, and build cache
+make check-secrets  # Verify API_KEY, REDIS_PASSWORD, QDRANT_API_KEY are not placeholders
 ```
 
 ---
 
 ## Testing
 
-The project ships with a comprehensive pytest suite covering 77% of business logic (Playwright browser automation excluded by design).
+The project ships with a comprehensive pytest suite: **386 tests**, 77% coverage (Playwright browser automation excluded by design, zero warnings).
 
 ```bash
 # Install test dependencies
@@ -222,28 +240,34 @@ python -m pytest tests/tier4_wiring/
 
 ```
 tests/
-├── conftest.py              # Session fixtures: Qdrant, embedding, vLLM, Playwright mocks
-├── tier1_critical/          # Pure-logic unit tests (no mocks)
+├── conftest.py                      # Session fixtures + 3rd-party warning filters
+├── tier1_critical/                  # Pure-logic unit tests (no mocks)
 │   ├── test_dom_mapper.py
 │   ├── test_metadata_extractor.py
+│   ├── test_outlines_constraint.py  # Schema validity, FSM self-containment, prompt hints
 │   ├── test_pdf_generator.py
 │   ├── test_resume_schema.py
-│   └── test_rewrite_schema.py
-├── tier2_services/          # Service unit tests (mocked Qdrant / embeddings / vLLM)
+│   ├── test_rewrite_schema.py
+│   └── test_security_validators.py  # SSRF guard, upload size, filename sanitizer, UUID
+├── tier2_services/                  # Service unit tests (mocked Qdrant / embeddings / vLLM)
 │   ├── test_embedding.py
 │   ├── test_ingest.py
 │   ├── test_matcher.py
 │   ├── test_parser.py
+│   ├── test_pdf_generator.py
 │   ├── test_qdrant_init.py
 │   ├── test_rewriter.py
+│   ├── test_scraper.py              # HTML→Markdown, description fetching, pipeline integration
+│   ├── test_settings.py             # SettingsConfigDict migration, zero Pydantic warnings
 │   └── test_tasks.py
-├── tier3_api/               # FastAPI integration tests (httpx ASGITransport)
+├── tier3_api/                       # FastAPI integration tests (httpx ASGITransport)
+│   ├── test_api_auth.py             # API key enforcement (401/200, dev-mode bypass)
 │   ├── test_api_jobs.py
 │   ├── test_api_match.py
 │   ├── test_api_resumes.py
 │   ├── test_api_rewrite.py
 │   └── test_api_submit.py
-└── tier4_wiring/            # End-to-end pipeline wiring tests
+└── tier4_wiring/                    # End-to-end pipeline wiring tests
     └── test_integration_wiring.py
 ```
 
@@ -252,6 +276,8 @@ tests/
 | Module | Coverage |
 |---|---|
 | `config/settings.py` | 100% |
+| `services/api/security.py` | 100% |
+| `services/api/validators.py` | 100% |
 | `services/automation/dom_mapper.py` | 100% |
 | `services/embeddings/embedding_service.py` | 100% |
 | `services/matching/matcher.py` | 100% |
@@ -262,8 +288,9 @@ tests/
 | `services/qdrant/init_collections.py` | 97% |
 | `services/api/routes/*` | 85–91% |
 | `services/rewrite/rewriter.py` | 90% |
+| `services/rewrite/outlines_constraint.py` | 88% |
 | `services/automation/submitter.py` | 10% *(requires live Playwright)* |
-| `services/scraper/scraper.py` | 7% *(requires live Playwright)* |
+| `services/scraper/scraper.py` | 12% *(requires live Playwright; HTML→Markdown helpers 100%)* |
 
 ---
 
@@ -284,7 +311,9 @@ Jobseeker/
 │   └── settings.py             # Pydantic BaseSettings
 ├── services/
 │   ├── api/                    # FastAPI orchestrator
-│   │   ├── main.py             # App factory + lifespan
+│   │   ├── main.py             # App factory, lifespan, rate-limit + security-header middleware
+│   │   ├── security.py         # X-API-Key dependency
+│   │   ├── validators.py       # SSRF guard, upload size, filename sanitizer, UUID check
 │   │   └── routes/             # jobs · resumes · match · rewrite · submit
 │   ├── embeddings/             # mxbai-embed-large-v1 singleton
 │   ├── qdrant/                 # Collection schema + init
@@ -304,6 +333,28 @@ Jobseeker/
     ├── uploads/
     └── outputs/
 ```
+
+---
+
+## What's New in v0.0.3-beta
+
+| Area | Change |
+|---|---|
+| **Security** | API key auth (`X-API-Key`) on every route; HTTP 401 on mismatch; dev bypass when `API_KEY` unset |
+| **Security** | `SecurityHeadersMiddleware`: 5 hardening headers on every response |
+| **Security** | `RateLimitMiddleware`: per-route sliding-window limits; HTTP 429 + `Retry-After` |
+| **Security** | SSRF guard (`validate_job_url`), upload-size guard, filename sanitizer, UUID validator across all routes |
+| **Security** | CORS tightened to explicit origin list, methods, and headers; Swagger UI gated behind `API_DEBUG=true` |
+| **Scraper** | Two-pass design: real job URLs captured; full HTML descriptions fetched concurrently via `asyncio.gather` |
+| **Scraper** | `_html_to_markdown()` converts job detail HTML to clean ATX Markdown (script/style stripped, truncated) |
+| **Scraper** | `markdownify==1.2.2` restored; description stubs eliminated throughout the pipeline |
+| **FSM/JSON** | `_extract_json_fallback()` removed — constraint violation raises `RuntimeError` immediately |
+| **FSM/JSON** | `validate_schema_self_contained()` pre-flight on every vLLM request; dangling `$ref` → `ValueError` |
+| **FSM/JSON** | `build_json_schema_description` inlines nested `TailoredExperience`/`TailoredBullet` fields in the LLM prompt |
+| **Deps** | All 22 packages bumped to latest; `playwright-stealth==2.0.3` API fix (`Stealth().apply_stealth_async`) |
+| **Infra** | Python 3.13 in both Docker images; vLLM v0.20.2; Qdrant v1.18.0; Redis 8.6.3 |
+| **Config** | `class Config:` → `model_config = SettingsConfigDict(…)` (Pydantic v2 convention) |
+| **Tests** | 362 → 386 tests; 5 new test files; zero warnings |
 
 ---
 
@@ -332,7 +383,7 @@ Jobseeker/
 - **DOM mapping** — heuristic-based; complex multi-step ATS forms may need manual review
 - **PDF generation** — basic ReportLab layout; LaTeX / HTML templates planned for v0.1.0
 - **Model fallback** — if Foundation-Sec-8B is unavailable: `VLLM_MODEL_NAME=meta-llama/Llama-3.1-8B-Instruct`
-- **`playwright-stealth`** — optional dependency; install with `pip install playwright-stealth` and set `PLAYWRIGHT_STEALTH_ENABLED=true`
+- **Rate limiter** — in-process, per-worker; not shared across Celery workers or multiple orchestrator replicas. A Redis-backed limiter is planned for v0.1.0
 
 ---
 
