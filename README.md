@@ -1,6 +1,6 @@
 # Jobseeker AI — Localized Cybersecurity Resume Automation
 
-> **v0.0.1-beta** — Production-ready MVP for automated cybersecurity resume parsing, tailoring, and job application submission, running entirely on local consumer-grade hardware.
+> **v0.0.2-beta** — Audit-hardened release: critical runtime bug fixes, O(1) Qdrant lookups, real submission history, playwright-stealth scraping, and comprehensive code-quality cleanup.
 
 [![Tests](https://img.shields.io/badge/tests-298%20passed-brightgreen)](./tests)
 [![Coverage](https://img.shields.io/badge/coverage-77%25-yellowgreen)](./htmlcov)
@@ -169,12 +169,18 @@ QDRANT_URL=http://qdrant:6333
 QDRANT_COLLECTION_JOBS=job_descriptions
 QDRANT_COLLECTION_RESUMES=resumes
 
+# Redis / Celery
+REDIS_HOST=redis
+REDIS_PORT=6379
+
 # Scraper
 SCRAPER_SCHEDULE_HOURS=6
+SCRAPER_SOURCES=indeed,linkedin,dice
 
 # Playwright
 PLAYWRIGHT_HEADLESS=true
 PLAYWRIGHT_TIMEOUT_MS=30000
+PLAYWRIGHT_STEALTH_ENABLED=true   # requires: pip install playwright-stealth
 ```
 
 ---
@@ -286,7 +292,7 @@ Jobseeker/
 │   ├── resume/                 # PDF/DOCX/TXT parser + Pydantic schema
 │   ├── matching/               # Cosine search + hard-filter engine
 │   ├── rewrite/                # vLLM rewrite + Outlines FSM constraint
-│   ├── tasks/                  # Celery app, scrape task, submit task
+│   ├── tasks/                  # Celery app, scrape task, submit task, batch-match task
 │   └── automation/             # Playwright submitter + DOM mapper + PDF gen
 ├── frontend/
 │   ├── app.py                  # Streamlit entry point
@@ -301,13 +307,32 @@ Jobseeker/
 
 ---
 
+## What's New in v0.0.2-beta
+
+| Area | Change |
+|---|---|
+| **Qdrant** | Thread-safe client singleton; all point lookups use `client.retrieve()` — O(1) vs O(N) scroll |
+| **API routes** | `delete_job` / `delete_resume` use `PointIdsList` (was broken); `get_job` / `get_resume` fixed |
+| **Matching** | `_get_resume_payload` replaced scroll-loop with O(1) retrieve |
+| **Rewriting** | `rewrite_resume_for_job()` accepts `match_score` param — skips redundant vector search |
+| **History** | Real submission history persisted to Redis; live Celery state enrichment; full table UI |
+| **Scraping** | `playwright-stealth` applied to all three scrapers and the form submitter |
+| **Batch match** | New `batch_match_new_jobs` Celery task auto-dispatched after every job ingest batch |
+| **Config** | `celery_broker_url` / `celery_result_backend` derived from `redis_host`/`redis_port` `@property` |
+| **Docker** | GPU reservation added to `orchestrator` + `celery-worker`; base image → `python:3.12-slim` |
+| **DRY** | `pdf_generator.py` refactored; dead `create_outlines_generator()` removed; metadata regex cleaned up |
+| **Frontend** | Delete resume button fixed (`api_delete()`); `current_resume_id` propagated through session state |
+
+---
+
 ## Limitations & Roadmap
 
 - **Single-user MVP** — multi-user auth and resume namespacing planned for v0.1.0
-- **LinkedIn scraping** — fragile against anti-bot measures; manual upload recommended for critical roles
-- **DOM mapping** — heuristic-based; complex multi-step forms may need manual review
-- **PDF generation** — basic ReportLab layout; LaTeX templates planned
+- **LinkedIn scraping** — fragile against anti-bot measures; `playwright-stealth` mitigates but manual upload is recommended for critical roles
+- **DOM mapping** — heuristic-based; complex multi-step ATS forms may need manual review
+- **PDF generation** — basic ReportLab layout; LaTeX / HTML templates planned for v0.1.0
 - **Model fallback** — if Foundation-Sec-8B is unavailable: `VLLM_MODEL_NAME=meta-llama/Llama-3.1-8B-Instruct`
+- **`playwright-stealth`** — optional dependency; install with `pip install playwright-stealth` and set `PLAYWRIGHT_STEALTH_ENABLED=true`
 
 ---
 

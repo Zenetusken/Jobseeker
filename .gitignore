@@ -1,5 +1,7 @@
 # Environment
 .env
+.env.*
+!.env.example
 
 # Python
 __pycache__/
@@ -8,6 +10,14 @@ __pycache__/
 dist/
 build/
 .eggs/
+pip-wheel-metadata/
+*.pyo
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env_dir/
 
 # Data directories
 data/qdrant_storage/
@@ -22,13 +32,16 @@ model-cache/
 .idea/
 *.swp
 *.swo
+*.orig
 
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Logs
 *.log
+logs/
 
 # Playwright
 playwright-report/
@@ -36,8 +49,20 @@ test-results/
 
 # Coverage
 .coverage
+.coverage.*
 coverage.xml
 htmlcov/
 
 # Pytest
 .pytest_cache/
+
+# Type checkers / linters
+.mypy_cache/
+.ruff_cache/
+.pytype/
+
+# Temporary / backup files
+*.tmp
+*.bak
+*.swp
+*~
