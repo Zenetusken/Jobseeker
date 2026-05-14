@@ -12,6 +12,7 @@
 [![Playwright](https://img.shields.io/badge/playwright-2EAD33)](https://playwright.dev)
 [![Docker](https://img.shields.io/badge/docker-2496ED)](https://www.docker.com)
 [![PyTorch](https://img.shields.io/badge/pytorch-EE4C2C)](https://pytorch.org)
+[![CUDA](https://img.shields.io/badge/cuda-76B900)](https://developer.nvidia.com/cuda-toolkit)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](./LICENSE)
 
 ---
