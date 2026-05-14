@@ -9,6 +9,7 @@ from services.rewrite.outlines_constraint import (
     build_json_schema_description,
     get_json_schema_for_prompt,
     apply_outlines_constraint_to_request,
+    validate_schema_self_contained,
 )
 from services.rewrite.schema import RewriteOutput
 
@@ -60,6 +61,16 @@ class TestGetJsonSchemaForPrompt:
         # Should describe the RewriteOutput schema
         assert "tailored_summary" in result or "experience" in result
 
+    def test_prompt_description_shows_nested_experience_fields(self):
+        """Prompt hint must expose TailoredExperience and TailoredBullet fields
+        so the LLM knows the structure the FSM will enforce."""
+        result = get_json_schema_for_prompt()
+        assert "title" in result
+        assert "company" in result
+        assert "bullets" in result
+        assert "original" in result
+        assert "tailored" in result
+
 
 class TestApplyOutlinesConstraintToRequest:
     def test_adds_extra_body(self):
@@ -102,3 +113,136 @@ class TestApplyOutlinesConstraintToRequest:
         assert "skills_highlighted" in schema["properties"]
         assert "certifications_emphasized" in schema["properties"]
         assert "overall_rationale" in schema["properties"]
+
+    def test_schema_self_contained_in_request(self):
+        """The guided_json schema must have no dangling $refs."""
+        kwargs = {"model": "test", "messages": []}
+        result = apply_outlines_constraint_to_request(kwargs)
+        schema = result["extra_body"]["guided_json"]
+        # Should not raise — all $refs must resolve within $defs
+        validate_schema_self_contained(schema)
+
+
+class TestSchemaValidity:
+    """Structural validation of the RewriteOutput JSON schema.
+
+    These tests prove that the schema passed to the Outlines FSM is
+    well-formed and self-contained — a prerequisite for the FSM to compile
+    and for malformed JSON to be truly impossible.
+    """
+
+    def test_schema_passes_jsonschema_draft7_validation(self):
+        """The schema must be a valid JSON Schema (Draft 7)."""
+        import jsonschema
+        schema = RewriteOutput.model_json_schema()
+        # check_schema raises SchemaError if the schema itself is invalid
+        jsonschema.Draft7Validator.check_schema(schema)
+
+    def test_all_refs_resolve_within_defs(self):
+        """Every $ref in the schema resolves to an entry in $defs."""
+        schema = RewriteOutput.model_json_schema()
+        defs = schema.get("$defs", {})
+
+        def _collect_refs(node, refs=None):
+            if refs is None:
+                refs = []
+            if isinstance(node, dict):
+                if "$ref" in node:
+                    refs.append(node["$ref"])
+                for v in node.values():
+                    _collect_refs(v, refs)
+            elif isinstance(node, list):
+                for item in node:
+                    _collect_refs(item, refs)
+            return refs
+
+        refs = _collect_refs(schema)
+        for ref in refs:
+            assert ref.startswith("#/$defs/"), f"Non-local $ref found: {ref}"
+            name = ref[len("#/$defs/"):]
+            assert name in defs, f"$ref '{ref}' has no matching $defs entry"
+
+    def test_schema_is_self_contained(self):
+        """validate_schema_self_contained must not raise for RewriteOutput."""
+        schema = RewriteOutput.model_json_schema()
+        # Should not raise
+        validate_schema_self_contained(schema)
+
+    def test_valid_rewrite_output_validates_against_schema(self):
+        """A known-good RewriteOutput instance must validate against the schema."""
+        import jsonschema
+        from services.rewrite.schema import TailoredExperience, TailoredBullet
+
+        schema = RewriteOutput.model_json_schema()
+        instance = RewriteOutput(
+            tailored_summary="Senior security engineer summary",
+            experience=[
+                TailoredExperience(
+                    title="Security Analyst",
+                    company="Corp",
+                    bullets=[
+                        TailoredBullet(
+                            original="Managed Splunk",
+                            tailored="Architected Splunk SIEM",
+                            rationale="Added architecture scope",
+                        )
+                    ],
+                )
+            ],
+            skills_highlighted=["SIEM", "Splunk"],
+            certifications_emphasized=["CISSP"],
+            overall_rationale="Strong alignment",
+        )
+        # jsonschema requires a resolver to follow $refs within the same document
+        resolver = jsonschema.RefResolver.from_schema(schema)
+        jsonschema.validate(
+            instance=json.loads(instance.model_dump_json()),
+            schema=schema,
+            resolver=resolver,
+        )
+
+    def test_invalid_structure_fails_schema_validation(self):
+        """A payload with missing required fields must fail schema validation."""
+        import jsonschema
+
+        schema = RewriteOutput.model_json_schema()
+        # experience items require 'title', 'company', 'bullets' — omit 'title'
+        bad_instance = {
+            "tailored_summary": "ok",
+            "experience": [
+                {"company": "Corp", "bullets": []}  # missing 'title'
+            ],
+            "skills_highlighted": [],
+            "certifications_emphasized": [],
+            "overall_rationale": "test",
+        }
+        resolver = jsonschema.RefResolver.from_schema(schema)
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(
+                instance=bad_instance,
+                schema=schema,
+                resolver=resolver,
+            )
+
+    def test_dangling_ref_raises_value_error(self):
+        """validate_schema_self_contained raises ValueError for a dangling $ref."""
+        broken_schema = {
+            "type": "object",
+            "properties": {
+                "foo": {"$ref": "#/$defs/NonExistent"}
+            },
+            "$defs": {},
+        }
+        with pytest.raises(ValueError, match="NonExistent"):
+            validate_schema_self_contained(broken_schema)
+
+    def test_non_local_ref_raises_value_error(self):
+        """validate_schema_self_contained raises ValueError for an external $ref."""
+        broken_schema = {
+            "type": "object",
+            "properties": {
+                "foo": {"$ref": "https://example.com/schema#/definitions/Foo"}
+            },
+        }
+        with pytest.raises(ValueError, match="not a local"):
+            validate_schema_self_contained(broken_schema)

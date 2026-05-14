@@ -123,17 +123,16 @@ class TestJobsAPI:
         assert data["status"] == "ok"
 
     @pytest.mark.asyncio
-    async def test_api_docs_available(self, test_app):
+    async def test_api_docs_disabled_in_production(self, test_app):
+        """Swagger UI must be disabled when api_debug=False (default)."""
         response = await test_app.get("/docs")
-        assert response.status_code == 200
+        assert response.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_openapi_schema(self, test_app):
+    async def test_openapi_schema_disabled_in_production(self, test_app):
+        """OpenAPI schema endpoint must be disabled when api_debug=False (default)."""
         response = await test_app.get("/openapi.json")
-        assert response.status_code == 200
-        data = response.json()
-        assert "paths" in data
-        assert "/api/jobs/ingest" in str(data["paths"])
+        assert response.status_code == 404
 
     @pytest.mark.asyncio
     async def test_lifespan_executes(self, test_app, mock_qdrant_client, mock_embedding):

@@ -10,7 +10,6 @@ from services.rewrite.rewriter import (
     _format_structured_resume,
     _build_prompt,
     _compute_diff,
-    _extract_json_fallback,
     _get_vllm_client,
     _call_vllm,
     rewrite_resume_for_job,
@@ -143,25 +142,48 @@ class TestComputeDiff:
         assert len(summary_diffs) == 0
 
 
-class TestExtractJsonFallback:
-    def test_valid_json_in_text(self):
-        content = 'Some text {"tailored_summary": "hi", "overall_rationale": "ok"} more text'
-        result = _extract_json_fallback(content)
-        assert result.tailored_summary == "hi"
+class TestCallVLLMConstraintViolation:
+    """Verify that any parse failure after the Outlines constraint is applied
+    raises RuntimeError instead of silently returning degraded output.
+    Since malformed JSON is mathematically impossible under correct guided
+    decoding, a parse failure signals a hard infrastructure failure.
+    """
 
-    def test_no_json(self):
-        result = _extract_json_fallback("Just plain text, no JSON here")
-        assert "Error" in result.overall_rationale
+    def _make_mock_client(self, content: str):
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_choice = MagicMock()
+        mock_message = MagicMock()
+        mock_message.content = content
+        mock_choice.message = mock_message
+        mock_response.choices = [mock_choice]
+        mock_client.chat.completions.create.return_value = mock_response
+        return mock_client
 
-    def test_malformed_json(self):
-        result = _extract_json_fallback('{"tailored_summary": "hi", broken}')
-        assert "Error" in result.overall_rationale
+    def test_call_vllm_raises_on_malformed_json(self):
+        """Non-JSON content must raise RuntimeError (FSM constraint violated)."""
+        mock_client = self._make_mock_client("not valid json at all")
+        with patch("services.rewrite.rewriter._get_vllm_client", return_value=mock_client):
+            with pytest.raises(RuntimeError, match="Outlines FSM constraint violated"):
+                _call_vllm("system", "user")
 
-    def test_json_without_required_fields(self):
-        content = '{"some_other_field": "value"}'
-        result = _extract_json_fallback(content)
-        # Should still return a RewriteOutput with defaults
-        assert isinstance(result, RewriteOutput)
+    def test_call_vllm_raises_on_schema_invalid_json(self):
+        """Syntactically valid JSON that fails RewriteOutput validation must
+        raise RuntimeError (FSM constraint violated)."""
+        # 'experience' must be a list, not a string
+        bad_json = json.dumps({"experience": "not a list", "overall_rationale": "ok"})
+        mock_client = self._make_mock_client(bad_json)
+        with patch("services.rewrite.rewriter._get_vllm_client", return_value=mock_client):
+            with pytest.raises(RuntimeError, match="Outlines FSM constraint violated"):
+                _call_vllm("system", "user")
+
+    def test_call_vllm_raises_error_message_contains_parse_detail(self):
+        """RuntimeError message must include parse error detail for diagnosis."""
+        mock_client = self._make_mock_client("{broken json")
+        with patch("services.rewrite.rewriter._get_vllm_client", return_value=mock_client):
+            with pytest.raises(RuntimeError) as exc_info:
+                _call_vllm("system", "user")
+        assert "guided_json" in str(exc_info.value).lower() or "constraint" in str(exc_info.value).lower()
 
 
 class TestRewriteResumeForJob:
@@ -245,7 +267,8 @@ class TestVLLMClient:
             assert result.tailored_summary == "Test summary"
             assert result.skills_highlighted == ["SIEM"]
 
-    def test_call_vllm_json_fallback(self):
+    def test_call_vllm_raises_on_malformed_content(self):
+        """Malformed content must raise RuntimeError, not return degraded output."""
         mock_client = MagicMock()
         mock_response = MagicMock()
         mock_choice = MagicMock()
@@ -256,9 +279,8 @@ class TestVLLMClient:
         mock_client.chat.completions.create.return_value = mock_response
 
         with patch("services.rewrite.rewriter._get_vllm_client", return_value=mock_client):
-            result = _call_vllm("system", "user")
-            assert isinstance(result, RewriteOutput)
-            assert "Error" in result.overall_rationale
+            with pytest.raises(RuntimeError, match="Outlines FSM constraint violated"):
+                _call_vllm("system", "user")
 
     def test_call_vllm_request_structure(self):
         """Verify the request sent to vLLM has correct deterministic params."""
@@ -282,3 +304,6 @@ class TestVLLMClient:
         assert call_kwargs["top_p"] == 1.0
         assert call_kwargs["seed"] == 42
         assert "extra_body" in call_kwargs
+        # guided_json schema must be self-contained (no dangling $refs)
+        from services.rewrite.outlines_constraint import validate_schema_self_contained
+        validate_schema_self_contained(call_kwargs["extra_body"]["guided_json"])

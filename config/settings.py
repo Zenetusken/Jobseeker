@@ -2,11 +2,18 @@
 Centralized configuration via pydantic-settings.
 Reads from environment / .env file.
 """
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
+from loguru import logger
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
     # Model
     vllm_model_name: str = "fdtn-ai/Foundation-Sec-8B-Reasoning"
     vllm_quantization: str = "awq"
@@ -26,10 +33,12 @@ class Settings(BaseSettings):
     qdrant_collection_jobs: str = "job_descriptions"
     qdrant_collection_resumes: str = "resumes"
     qdrant_vector_size: int = 1024
+    qdrant_api_key: str = ""
 
     # Redis / Celery
     redis_host: str = "redis"
     redis_port: int = 6379
+    redis_password: str = ""
 
     # Scraper
     scraper_schedule_hours: int = 6
@@ -39,6 +48,16 @@ class Settings(BaseSettings):
     # API
     api_host: str = "0.0.0.0"
     api_port: int = 8001
+
+    # Security
+    api_key: str = ""
+    api_debug: bool = False
+    allowed_origins: str = ""
+
+    # Upload / validation limits
+    max_upload_bytes: int = 10_485_760   # 10 MB
+    max_description_length: int = 50_000
+    max_batch_size: int = 100
 
     # Streamlit
     streamlit_host: str = "0.0.0.0"
@@ -59,16 +78,25 @@ class Settings(BaseSettings):
 
     @property
     def celery_broker_url(self) -> str:
+        if self.redis_password:
+            return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/0"
         return f"redis://{self.redis_host}:{self.redis_port}/0"
 
     @property
     def celery_result_backend(self) -> str:
-        return f"redis://{self.redis_host}:{self.redis_port}/0"
+        return self.celery_broker_url
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        extra = "ignore"
+    @property
+    def allowed_origins_list(self) -> list[str]:
+        if not self.allowed_origins.strip():
+            return []
+        return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
 
 
 settings = Settings()
+
+if not settings.api_key:
+    logger.warning(
+        "API_KEY is not set — all orchestrator endpoints are unauthenticated. "
+        "Set API_KEY in .env before deploying to production."
+    )

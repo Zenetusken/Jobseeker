@@ -17,8 +17,8 @@ def _apply_stealth_sync(page) -> None:
     if not settings.playwright_stealth_enabled:
         return
     try:
-        from playwright_stealth import stealth_sync
-        stealth_sync(page)
+        from playwright_stealth import Stealth
+        Stealth().apply_stealth_sync(page)
     except ImportError:
         logger.debug("playwright-stealth not available — skipping stealth")
 

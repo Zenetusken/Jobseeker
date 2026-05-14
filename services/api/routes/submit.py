@@ -4,12 +4,13 @@ Submit Routes — Trigger Playwright-based application submission via Celery.
 import json
 import datetime
 from datetime import timezone
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from loguru import logger
 
 from services.tasks.submit_task import submit_application_task
+from services.api.validators import validate_job_url, validate_uuid
 from config.settings import settings
 
 router = APIRouter()
@@ -18,13 +19,31 @@ HISTORY_KEY = "jobseeker:submissions"
 HISTORY_MAX = 200
 
 
+_MAX_TAILORED_RESUME_BYTES = 1_048_576  # 1 MB
+
+
 class SubmitRequest(BaseModel):
-    job_id: str
-    resume_id: str
+    job_id: str = Field(..., max_length=100)
+    resume_id: str = Field(..., max_length=100)
     tailored_resume: dict
-    job_url: str
-    job_title: str = ""
-    company: str = ""
+    job_url: str = Field(..., max_length=2048)
+    job_title: str = Field("", max_length=500)
+    company: str = Field("", max_length=500)
+
+    @field_validator("job_url")
+    @classmethod
+    def job_url_must_be_public(cls, v: str) -> str:
+        return validate_job_url(v)
+
+    @field_validator("tailored_resume")
+    @classmethod
+    def tailored_resume_size_limit(cls, v: dict) -> dict:
+        if len(json.dumps(v)) > _MAX_TAILORED_RESUME_BYTES:
+            raise ValueError(
+                f"tailored_resume exceeds the maximum allowed size of "
+                f"{_MAX_TAILORED_RESUME_BYTES // 1024} KB."
+            )
+        return v
 
 
 class SubmitResponse(BaseModel):
@@ -37,6 +56,7 @@ def _get_redis():
     return redis_lib.Redis(
         host=settings.redis_host,
         port=settings.redis_port,
+        password=settings.redis_password or None,
         db=0,
         decode_responses=True,
     )
@@ -76,14 +96,17 @@ async def submit_application(req: SubmitRequest):
             "status": "queued",
             "message": "Application submission dispatched",
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Submit dispatch failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/status/{task_id}")
 async def get_submission_status(task_id: str):
     """Check the status of a submission task."""
+    validate_uuid(task_id, field_name="task_id")
     from services.tasks.celery_app import celery_app
     result = celery_app.AsyncResult(task_id)
     return {
@@ -94,7 +117,7 @@ async def get_submission_status(task_id: str):
 
 
 @router.get("/history")
-async def get_submission_history(limit: int = 50):
+async def get_submission_history(limit: int = Query(default=50, ge=1, le=200)):
     """Get recent submission history, enriched with live Celery task state."""
     from services.tasks.celery_app import celery_app
     try:

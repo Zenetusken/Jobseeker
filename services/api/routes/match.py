@@ -2,7 +2,7 @@
 Match Routes — Vector search + metadata filtering for job-resume matching.
 """
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from loguru import logger
 
@@ -13,8 +13,8 @@ router = APIRouter()
 
 class MatchRequest(BaseModel):
     resume_id: str
-    top_k: int = 10
-    min_score: float = 0.3
+    top_k: int = Field(10, ge=1, le=500)
+    min_score: float = Field(0.3, ge=0.0, le=1.0)
 
 
 class MatchResponse(BaseModel):
@@ -41,7 +41,7 @@ async def match_jobs(req: MatchRequest):
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"Match failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/job/{job_id}")

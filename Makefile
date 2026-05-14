@@ -42,6 +42,16 @@ help:
 # ============================================================
 # Build & Run
 # ============================================================
+check-secrets:
+	@echo "=== Checking required production secrets ==="
+	@if [ -z "$$API_KEY" ] || [ "$$API_KEY" = "change-me-to-a-long-random-secret" ]; then \
+		echo "ERROR: API_KEY is not set or is the placeholder value."; exit 1; fi
+	@if [ -z "$$REDIS_PASSWORD" ] || [ "$$REDIS_PASSWORD" = "change-me-strong-redis-password" ]; then \
+		echo "ERROR: REDIS_PASSWORD is not set or is the placeholder value."; exit 1; fi
+	@if [ -z "$$QDRANT_API_KEY" ] || [ "$$QDRANT_API_KEY" = "change-me-qdrant-api-key" ]; then \
+		echo "ERROR: QDRANT_API_KEY is not set or is the placeholder value."; exit 1; fi
+	@echo "All required secrets are set."
+
 build:
 	docker compose build
 

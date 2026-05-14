@@ -15,7 +15,7 @@ class TestSubmitAPI:
                 "job_id": "job-1",
                 "resume_id": "resume-1",
                 "tailored_resume": {"tailored_summary": "Test"},
-                "job_url": "https://careers.example.com/apply",
+                "job_url": "",
             })
             assert response.status_code == 200
             data = response.json()
@@ -38,10 +38,11 @@ class TestSubmitAPI:
             mock_result.result = {"status": "submitted"}
             mock_celery.AsyncResult.return_value = mock_result
 
-            response = await test_app.get("/api/submit/status/task-123")
+            _task_id = "550e8400-e29b-41d4-a716-446655440000"
+            response = await test_app.get(f"/api/submit/status/{_task_id}")
             assert response.status_code == 200
             data = response.json()
-            assert data["task_id"] == "task-123"
+            assert data["task_id"] == _task_id
             assert data["status"] == "SUCCESS"
 
     @pytest.mark.asyncio

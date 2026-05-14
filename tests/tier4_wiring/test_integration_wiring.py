@@ -131,7 +131,7 @@ class TestIntegrationWiring:
                 "job_id": job_id,
                 "resume_id": resume_id,
                 "tailored_resume": rewrite_data["tailored_resume"],
-                "job_url": "https://careers.acme.com/apply/123",
+                "job_url": "https://www.linkedin.com/jobs/view/123",
                 "job_title": "Senior Cybersecurity Engineer",
                 "company": "Acme Defense Corp",
             })

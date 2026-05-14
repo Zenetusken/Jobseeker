@@ -156,33 +156,32 @@ def _call_vllm(system_prompt: str, user_prompt: str) -> RewriteOutput:
     content = response.choices[0].message.content
     logger.info(f"vLLM response received ({len(content)} chars)")
 
-    # Parse the guaranteed-valid JSON
+    # Parse the guaranteed-valid JSON.
+    # If this raises, the Outlines FSM constraint was violated — that is
+    # mathematically impossible under correct guided decoding, so we treat
+    # it as a hard infrastructure failure, not a recoverable condition.
     try:
         data = json.loads(content)
         return RewriteOutput(**data)
-    except (json.JSONDecodeError, Exception) as e:
-        logger.error(f"JSON parse failed despite constraints: {e}")
-        logger.debug(f"Raw content: {content[:500]}...")
-        # Fallback: try to extract JSON from the response
-        return _extract_json_fallback(content)
-
-
-def _extract_json_fallback(content: str) -> RewriteOutput:
-    """Fallback JSON extraction if guided decoding fails."""
-    import re
-    # Try to find JSON block
-    match = re.search(r'\{[\s\S]*\}', content)
-    if match:
-        try:
-            data = json.loads(match.group())
-            return RewriteOutput(**data)
-        except Exception:
-            pass
-    # Return empty result
-    logger.error("Could not extract valid JSON from LLM response")
-    return RewriteOutput(
-        overall_rationale="Error: LLM output could not be parsed as JSON."
-    )
+    except json.JSONDecodeError as e:
+        logger.critical(
+            f"Outlines FSM constraint violated — vLLM returned non-JSON despite "
+            f"guided_json constraint. Raw content (first 500 chars): {content[:500]!r}"
+        )
+        raise RuntimeError(
+            f"Outlines FSM constraint violated: malformed JSON received despite "
+            f"guided_json constraint. Parse error: {e}"
+        ) from e
+    except Exception as e:
+        logger.critical(
+            f"Outlines FSM constraint violated — RewriteOutput validation failed "
+            f"despite guided_json constraint. Error: {e}. "
+            f"Raw content (first 500 chars): {content[:500]!r}"
+        )
+        raise RuntimeError(
+            f"Outlines FSM constraint violated: JSON parsed but failed RewriteOutput "
+            f"schema validation. Validation error: {e}"
+        ) from e
 
 
 def _compute_diff(original_resume: dict, rewrite: RewriteOutput) -> list[dict]:

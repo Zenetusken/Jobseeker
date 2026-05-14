@@ -3,14 +3,12 @@ services:
   # vLLM Inference Engine — Foundation-Sec-8B (AWQ 4-bit)
   # ============================================================
   vllm-engine:
-    image: vllm/vllm-openai:latest
+    image: vllm/vllm-openai:v0.20.2
     container_name: jobseeker-vllm
     runtime: nvidia
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - HF_HOME=/model-cache
-    ports:
-      - "${VLLM_PORT:-8000}:8000"
     volumes:
       - model-cache:/model-cache
       - ./services/vllm/start.sh:/start.sh:ro
@@ -43,16 +41,14 @@ services:
   # Qdrant Vector Database
   # ============================================================
   qdrant:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant:v1.18.0
     container_name: jobseeker-qdrant
-    ports:
-      - "${QDRANT_PORT:-6333}:6333"
-      - "6334:6334"
     volumes:
       - qdrant-data:/qdrant/storage
       - ./services/qdrant/config.yaml:/qdrant/config/production.yaml:ro
     environment:
       - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY:-}
     networks:
       - jobseeker-net
     healthcheck:
@@ -66,10 +62,12 @@ services:
   # Redis — Celery Broker & Result Backend
   # ============================================================
   redis:
-    image: redis:7-alpine
+    image: redis:8.6.3-alpine
     container_name: jobseeker-redis
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
+    command: >-
+      sh -c 'if [ -n "$$REDIS_PASSWORD" ];
+      then redis-server --requirepass "$$REDIS_PASSWORD";
+      else redis-server; fi'
     volumes:
       - redis-data:/data
     networks:
@@ -180,8 +178,9 @@ services:
     volumes:
       - ./services:/app/services:ro
     environment:
-      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
-      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
     depends_on:
       redis:
         condition: service_healthy

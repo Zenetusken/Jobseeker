@@ -3,7 +3,7 @@ Rewrite Routes — LLM-powered resume tailoring.
 Uses Foundation-Sec-8B via vLLM with Outlines constraints.
 """
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from loguru import logger
 
@@ -13,9 +13,9 @@ router = APIRouter()
 
 
 class RewriteRequest(BaseModel):
-    resume_id: str
-    job_id: str
-    match_score: float = 0.0
+    resume_id: str = Field(..., max_length=100)
+    job_id: str = Field(..., max_length=100)
+    match_score: float = Field(0.0, ge=0.0, le=1.0)
 
 
 class RewriteResponse(BaseModel):
@@ -48,4 +48,4 @@ async def tailor_resume(req: RewriteRequest):
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"Rewrite failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")

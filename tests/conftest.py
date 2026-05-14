@@ -132,6 +132,15 @@ def pytest_configure(config):
     import sys
     from unittest.mock import MagicMock
 
+    config.addinivalue_line(
+        "filterwarnings",
+        r"ignore:ast\.NameConstant is deprecated:DeprecationWarning:reportlab",
+    )
+    config.addinivalue_line(
+        "filterwarnings",
+        r"ignore:The 'strip_cdata' option:DeprecationWarning:bs4",
+    )
+
     # Prevent SentenceTransformer from trying to use CUDA
     mock_st = MagicMock()
     mock_st_instance = MagicMock()

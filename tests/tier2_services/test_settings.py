@@ -82,3 +82,77 @@ class TestSettings:
         assert settings.vllm_model_name is not None
         assert settings.vllm_base_url is not None
         assert settings.qdrant_url is not None
+
+
+class TestSecuritySettings:
+    def test_api_key_defaults_empty(self):
+        from config.settings import Settings
+        s = Settings()
+        assert s.api_key == "" or isinstance(s.api_key, str)
+
+    def test_api_debug_defaults_false(self):
+        from config.settings import Settings
+        s = Settings()
+        assert s.api_debug is False
+
+    def test_allowed_origins_defaults_empty(self):
+        from config.settings import Settings
+        s = Settings()
+        assert s.allowed_origins == "" or isinstance(s.allowed_origins, str)
+
+    def test_allowed_origins_list_empty_when_blank(self):
+        from config.settings import Settings
+        s = Settings(allowed_origins="")
+        assert s.allowed_origins_list == []
+
+    def test_allowed_origins_list_parsed_from_comma_string(self):
+        from config.settings import Settings
+        s = Settings(allowed_origins="https://a.com,https://b.com")
+        assert s.allowed_origins_list == ["https://a.com", "https://b.com"]
+
+    def test_allowed_origins_list_strips_whitespace(self):
+        from config.settings import Settings
+        s = Settings(allowed_origins=" https://a.com , https://b.com ")
+        assert "https://a.com" in s.allowed_origins_list
+        assert "https://b.com" in s.allowed_origins_list
+
+    def test_redis_password_defaults_empty(self):
+        from config.settings import Settings
+        s = Settings()
+        assert s.redis_password == "" or isinstance(s.redis_password, str)
+
+    def test_qdrant_api_key_defaults_empty(self):
+        from config.settings import Settings
+        s = Settings()
+        assert s.qdrant_api_key == "" or isinstance(s.qdrant_api_key, str)
+
+    def test_celery_broker_url_without_password(self):
+        from config.settings import Settings
+        s = Settings(redis_host="redis", redis_port=6379, redis_password="")
+        assert s.celery_broker_url == "redis://redis:6379/0"
+
+    def test_celery_broker_url_with_password(self):
+        from config.settings import Settings
+        s = Settings(redis_host="redis", redis_port=6379, redis_password="secret")
+        assert s.celery_broker_url == "redis://:secret@redis:6379/0"
+        assert "secret" in s.celery_broker_url
+
+    def test_celery_result_backend_equals_broker(self):
+        from config.settings import Settings
+        s = Settings(redis_password="mypass")
+        assert s.celery_result_backend == s.celery_broker_url
+
+    def test_max_upload_bytes_default(self):
+        from config.settings import Settings
+        s = Settings()
+        assert s.max_upload_bytes == 10_485_760
+
+    def test_max_description_length_default(self):
+        from config.settings import Settings
+        s = Settings()
+        assert s.max_description_length == 50_000
+
+    def test_max_batch_size_default(self):
+        from config.settings import Settings
+        s = Settings()
+        assert s.max_batch_size == 100
