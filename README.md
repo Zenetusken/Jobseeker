@@ -2,18 +2,22 @@
 
 > **v0.0.3-beta** — Security hardening, full job description pipeline, FSM/JSON strictness, dependency sweep to latest, Python 3.13.
 
-[![Python](https://img.shields.io/badge/python-blue)](https://www.python.org)
-[![FastAPI](https://img.shields.io/badge/fastapi-009688)](https://fastapi.tiangolo.com)
-[![Streamlit](https://img.shields.io/badge/streamlit-FF4B4B)](https://streamlit.io)
-[![vLLM](https://img.shields.io/badge/vllm-76B900)](https://github.com/vllm-project/vllm)
-[![Qdrant](https://img.shields.io/badge/qdrant-FF0055)](https://qdrant.tech)
-[![Redis](https://img.shields.io/badge/redis-DC382D)](https://redis.io)
-[![Celery](https://img.shields.io/badge/celery-37814A)](https://docs.celeryq.dev)
-[![Playwright](https://img.shields.io/badge/playwright-2EAD33)](https://playwright.dev)
+<div align="center">
+
+[![Python](https://img.shields.io/badge/python-3.13-blue)](https://www.python.org)
+[![FastAPI](https://img.shields.io/badge/fastapi-0.136.1-009688)](https://fastapi.tiangolo.com)
+[![Streamlit](https://img.shields.io/badge/streamlit-1.57.0-FF4B4B)](https://streamlit.io)
+[![vLLM](https://img.shields.io/badge/vllm-v0.20.2-76B900)](https://github.com/vllm-project/vllm)
+[![Qdrant](https://img.shields.io/badge/qdrant-1.18.0-FF0055)](https://qdrant.tech)
+[![Redis](https://img.shields.io/badge/redis-8.6.3-DC382D)](https://redis.io)
+[![Celery](https://img.shields.io/badge/celery-5.6.3-37814A)](https://docs.celeryq.dev)
+[![Playwright](https://img.shields.io/badge/playwright-1.59.0-2EAD33)](https://playwright.dev)
 [![Docker](https://img.shields.io/badge/docker-2496ED)](https://www.docker.com)
-[![PyTorch](https://img.shields.io/badge/pytorch-EE4C2C)](https://pytorch.org)
-[![CUDA](https://img.shields.io/badge/cuda-76B900)](https://developer.nvidia.com/cuda-toolkit)
+[![PyTorch](https://img.shields.io/badge/pytorch-2.12.0-EE4C2C)](https://pytorch.org)
+[![CUDA](https://img.shields.io/badge/cuda-12.1-76B900)](https://developer.nvidia.com/cuda-toolkit)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](./LICENSE)
+
+</div>
 
 ---
 
