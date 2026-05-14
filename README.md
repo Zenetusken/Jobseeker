@@ -2,9 +2,16 @@
 
 > **v0.0.3-beta** — Security hardening, full job description pipeline, FSM/JSON strictness, dependency sweep to latest, Python 3.13.
 
-[![Tests](https://img.shields.io/badge/tests-386%20passed-brightgreen)](./tests)
-[![Coverage](https://img.shields.io/badge/coverage-77%25-yellowgreen)](./htmlcov)
-[![Python](https://img.shields.io/badge/python-3.13-blue)](https://www.python.org)
+[![Python](https://img.shields.io/badge/python-blue)](https://www.python.org)
+[![FastAPI](https://img.shields.io/badge/fastapi-009688)](https://fastapi.tiangolo.com)
+[![Streamlit](https://img.shields.io/badge/streamlit-FF4B4B)](https://streamlit.io)
+[![vLLM](https://img.shields.io/badge/vllm-76B900)](https://github.com/vllm-project/vllm)
+[![Qdrant](https://img.shields.io/badge/qdrant-FF0055)](https://qdrant.tech)
+[![Redis](https://img.shields.io/badge/redis-DC382D)](https://redis.io)
+[![Celery](https://img.shields.io/badge/celery-37814A)](https://docs.celeryq.dev)
+[![Playwright](https://img.shields.io/badge/playwright-2EAD33)](https://playwright.dev)
+[![Docker](https://img.shields.io/badge/docker-2496ED)](https://www.docker.com)
+[![PyTorch](https://img.shields.io/badge/pytorch-EE4C2C)](https://pytorch.org)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](./LICENSE)
 
 ---
