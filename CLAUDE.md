@@ -91,12 +91,14 @@ Middleware stack (applied in registration order, outermost first at request time
 2. `SecurityHeadersMiddleware` — security headers on every response
 3. `CORSMiddleware` — restricted to `settings.allowed_origins_list`
 
-All routes are protected by the `get_api_key` dependency (`services/api/security.py`). Routes import it as:
+All routes are protected by the `get_api_key` dependency applied router-wide at registration time in `main.py`:
 ```python
-from services.api.security import get_api_key
-# ...
-@router.post("/endpoint", dependencies=[Depends(get_api_key)])
+_auth = [Depends(get_api_key)]
+app.include_router(jobs.router,    prefix="/api/jobs",    dependencies=_auth)
+app.include_router(resumes.router, prefix="/api/resumes", dependencies=_auth)
+# ... all five routers
 ```
+Individual route handlers do **not** need to import or declare the dependency.
 
 Swagger/ReDoc UI is only mounted when `settings.api_debug is True`.
 
